@@ -50,8 +50,7 @@
 
         <!-- 音頻播放器 (隱藏) -->
         <audio id="audioPlayer">
-            <!-- ⭐️ 替換點 1: 您的 12 分鐘音頻原始連結 (已修正為 Google Drive 直鏈格式) ⭐️ -->
-            <!-- 請確認該檔案已設為「知道連結的人皆可存取」 -->
+            <!-- Google Drive 音頻連結已修正 -->
             <source src="https://drive.google.com/uc?export=download&id=1uNpibQkB_M1xuSlicsFW58bRG2aHwtdK" type="audio/mp3"> 
             您的瀏覽器不支持音頻播放。
         </audio>
@@ -63,23 +62,20 @@
             </h3>
             <p class="text-gray-600 mb-4 text-sm">輸入您的資訊，即可獲取這份高價值引導，並解鎖下方的專屬教練通道。</p>
             
-            <!-- 🌟 ConvertKit 專用表單結構 🌟 -->
-            <!-- ⭐️ 替換點 2: ConvertKit Action URL ⭐️ -->
+            <!-- ConvertKit 專用表單結構：Action URL 和 Form ID 已修正 -->
             <form id="emailForm" class="flex flex-col space-y-3" 
-                  action="https://app.convertkit.com/forms/8833846/subscriptions" 
+                  action="https://app.kit.com/forms/8833846/subscriptions" 
                   method="POST" 
                   target="hidden_iframe">
 
-                <!-- ⭐️ 替換點 3: ConvertKit form_id ⭐️ -->
                 <input type="hidden" name="form_id" value="8833846" /> 
-                <!-- ⭐️ 替換點 4: ConvertKit k_id ⭐️ -->
-                <input type="hidden" name="k_id" value="534e0fb20c" />
+                <input type="hidden" name="k_id" value="" />
                 
-                <!-- 姓名欄位: 採用 ConvertKit 預設的 name 屬性 -->
+                <!-- 姓名欄位 -->
                 <input type="text" name="fields[first_name]" id="nameInput" placeholder="您的稱謂 (必填)" required
                        class="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder-gray-500 focus:ring-indigo-500 focus:border-indigo-500">
                 
-                <!-- 信箱欄位: 採用 ConvertKit 預設的 name 屬性 -->
+                <!-- 信箱欄位 -->
                 <input type="email" name="email_address" id="emailInput" placeholder="您的電子信箱 (必填)" required
                        class="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder-gray-500 focus:ring-indigo-500 focus:border-indigo-500">
                        
@@ -118,8 +114,7 @@
                 若想將這份安定感**內化為持久的行動慣性**，並**徹底根除壓力迴圈**，您需要一個專屬的系統性重塑計畫。
             </p>
 
-            <!-- CTA 按鈕：勇氣加速器名稱放在這裡 -->
-            <!-- ⭐️ 替換點 5: 教練預約連結 ⭐️ -->
+            <!-- CTA 按鈕：已替換為使用者提供的教練預約連結 -->
             <a id="consultationLink" href="https://lemonhumandesign.com/book-a-call/" target="_blank"
                class="w-full inline-flex items-center justify-center py-4 rounded-xl font-bold text-lg transition duration-300 bg-red-600 hover:bg-red-700 shadow-xl text-white">
                 <i data-lucide="rocket" class="w-6 h-6 inline mr-2"></i> 立即預約教練：專屬勇氣加速器諮詢
@@ -189,9 +184,9 @@
                 // 4. 發出成功通知
                 showCustomMessage("解鎖成功！名單已收集並傳送至您的 ConvertKit。", 'success');
 
-                // 恢復按鈕狀態 
+                // 恢復按鈕狀態
                 submitEmailButton.disabled = false;
-                submitEmailButton.innerHTML = '<i data-lucide="mail" class="w-5 h-5 inline mr-2"></i> 立即解鎖您的專屬通道'; 
+                submitEmailButton.innerHTML = '<i data-lucide="mail" class="w-5 h-5 inline mr-2"></i> 立即解鎖您的專屬通道';
                 lucide.createIcons();
 
                 submitted = false; // 重置提交標記
@@ -216,10 +211,10 @@
 
             submitted = true; // 設定提交標記
             
-            // 成功後的 formSuccessHandler 會在 iframe 加載完畢後自動觸發
+            // 讓表單正常提交到隱藏的 iframe (ConvertKit 腳本會處理實際的資料提交)
         });
 
-        // --- 音頻播放邏輯 (保持不變) ---
+        // --- 音頻播放邏輯 ---
 
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
@@ -253,11 +248,6 @@
         });
 
         playButton.addEventListener('click', () => {
-            // 檢查 Google Drive 權限，提供最後一層防護提醒
-            if (audioPlayer.currentSrc.includes('1uNpibQkB_M1xuSlicsFW58bRG2aHwtdK')) {
-                 showCustomMessage("🚨 請確認 Google Drive 檔案權限已設定為「知道連結的人皆可存取」，否則音頻將無法播放。", 'error');
-            }
-
             if (isPlaying) {
                 audioPlayer.pause();
                 isPlaying = false;
@@ -267,6 +257,7 @@
                 visualizer.textContent = '⏸️ 引導已暫停，隨時可以繼續';
             } else {
                 audioPlayer.play().catch(e => {
+                    // 這裡的錯誤通常是瀏覽器安全設定，需要用戶先點擊一次才能播放
                     showCustomMessage("瀏覽器需要用戶互動才能開始播放。請再點擊一次播放按鈕。", 'warning');
                     console.error("Audio playback error:", e);
                 });
