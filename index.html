@@ -18,41 +18,56 @@
         // 全域變數定義
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initialAuthToken : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         window.firebase = {}; 
         window.firebase.db = null;
         window.firebase.userId = null;
+        // 新增狀態變數：追蹤 Firebase 是否已準備好資料庫和用戶ID
+        window.firebase.isReady = false; 
         
-        // Firebase 初始化
-        window.initializeFirebase = async function() {
-            try {
-                setLogLevel('error'); 
-
-                const app = initializeApp(firebaseConfig);
-                const db = getFirestore(app);
-                const auth = getAuth(app);
-                
-                window.firebase.db = db;
-
-                // 身份驗證
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        window.firebase.userId = user.uid;
-                        console.log("Firebase 初始化成功。");
+        /** * 初始化 Firebase (在網頁載入時立即執行) 
+         * 使用 Promise 確保異步操作的同步性
+         */
+        window.initializeFirebase = function() {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    setLogLevel('error'); // 只顯示錯誤訊息
+    
+                    const app = initializeApp(firebaseConfig);
+                    const db = getFirestore(app);
+                    const auth = getAuth(app);
+                    
+                    window.firebase.db = db;
+    
+                    // 身份驗證
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
                     }
-                });
-
-            } catch (error) {
-                console.error("Firebase 初始化失敗:", error);
-                showCustomMessage("資料庫連線失敗，名單收集功能可能無法運作。", 'error');
-            }
+    
+                    // 監聽身份驗證狀態變化，確保取得用戶ID
+                    onAuthStateChanged(auth, (user) => {
+                        if (user) {
+                            window.firebase.userId = user.uid;
+                            window.firebase.isReady = true; // Firebase 準備就緒！
+                            resolve(); // 解析 Promise
+                        } else {
+                            // Fallback for environments without token
+                            if (!window.firebase.isReady) {
+                                window.firebase.userId = auth.currentUser?.uid || 'anonymous-' + Date.now();
+                                window.firebase.isReady = true;
+                                resolve();
+                            }
+                        }
+                    });
+    
+                } catch (error) {
+                    console.error("Firebase 初始化失敗:", error);
+                    reject(error);
+                }
+            });
         }
         
         /**
@@ -62,8 +77,9 @@
             const db = window.firebase.db;
             const userId = window.firebase.userId;
 
-            if (!db || !userId) {
-                showCustomMessage("資料庫尚未準備好，請稍等再試一次。", 'warning');
+            if (!window.firebase.isReady || !db || !userId) {
+                // 如果到這裡還沒準備好，則表示連線失敗
+                showCustomMessage("資料庫連線失敗，請檢查網路或稍後再試。", 'error');
                 return false;
             }
 
@@ -72,19 +88,18 @@
                 const leadsCollectionRef = collection(db, `artifacts/${appId}/public/data/general_leads`);
                 
                 await addDoc(leadsCollectionRef, {
-                    name: name, // 姓名
+                    name: name, 
                     email: email, 
                     userId: userId,
-                    source: 'rhythm_accelerator_v19', // 更新版本號
+                    source: 'rhythm_accelerator_v20_fix', // 更新版本號
                     timestamp: new Date().toISOString()
                 });
 
-                showCustomMessage("解鎖成功！請點擊播放按鈕開始 12 分鐘引導。", 'success');
                 return true;
 
             } catch (error) {
                 console.error("儲存電子郵件失敗:", error);
-                showCustomMessage("儲存時發生錯誤。請確認您的資訊是否正確。", 'error');
+                showCustomMessage("儲存時發生錯誤。請檢查您的資訊是否正確。", 'error');
                 return false;
             }
         }
@@ -191,7 +206,7 @@
 
             <!-- CTA 按鈕：勇氣加速器名稱放在這裡 -->
             <!-- ⭐️ 替換點 2: 請用您的 Line ID 連結或預約諮詢頁面連結替換此處的 URL ⭐️ -->
-            <a id="consultationLink" href="https://https://lemonhumandesign.com/book-a-call/" target="_blank"
+            <a id="consultationLink" href="https://lemonhumandesign.com/book-a-call/" target="_blank"
                class="w-full inline-flex items-center justify-center py-4 rounded-xl font-bold text-lg transition duration-300 bg-red-600 hover:bg-red-700 shadow-xl text-white">
                 <i data-lucide="rocket" class="w-6 h-6 inline mr-2"></i> 立即預約教練：專屬勇氣加速器諮詢
             </a>
@@ -203,7 +218,11 @@
     <script>
         // --- 初始化 & 變數 ---
         lucide.createIcons();
-        window.initializeFirebase(); // 呼叫 Firebase 初始化
+        // 初始化 Firebase (在網頁載入後，但其他腳本運行前開始異步連線)
+        window.firebaseInitPromise = window.initializeFirebase().catch(e => {
+            showCustomMessage("系統：Firebase 初始化失敗。請稍後再試。", 'error');
+            console.error("Firebase init failed:", e);
+        });
         
         const audioPlayer = document.getElementById('audioPlayer');
         const playButton = document.getElementById('playButton');
@@ -212,11 +231,12 @@
         const durationTimeDisplay = document.getElementById('durationTime');
         const consultationLink = document.getElementById('consultationLink');
         const emailForm = document.getElementById('emailForm');
-        const nameInput = document.getElementById('nameInput'); // 名稱輸入欄
+        const nameInput = document.getElementById('nameInput'); 
         const emailInput = document.getElementById('emailInput');
         const conversionBlock = document.getElementById('conversionBlock');
         const audioControls = document.getElementById('audioControls'); 
         const emailFormBlock = document.getElementById('emailFormBlock');
+        const submitEmailButton = document.getElementById('submitEmailButton');
         
         let isPlaying = false;
         let emailSubmitted = false; 
@@ -238,50 +258,63 @@
             }, 5000);
         }
 
-        // --- 名單收集邏輯：成功後解鎖所有功能 ---
+        // --- 名單收集邏輯：成功後解鎖所有功能 (優化連線穩定性) ---
         emailForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const name = nameInput.value.trim();
             const email = emailInput.value.trim();
-
-            if (!name) {
-                 showCustomMessage("請填寫您的稱謂。", 'warning');
-                 nameInput.focus();
-                 return;
-            }
-
-            if (!email || !email.includes('@')) {
-                showCustomMessage("請輸入有效的電子信箱格式。", 'warning');
-                emailInput.focus();
-                return;
-            }
-
-            const success = await window.saveLeadEmail(name, email); // 傳入名稱和信箱
             
-            if (success) {
-                emailSubmitted = true;
-                
-                // 1. 解鎖音頻控制區
-                audioControls.classList.remove('opacity-50', 'pointer-events-none');
-                playButton.disabled = false;
-                playButton.classList.remove('bg-gray-300', 'cursor-not-allowed', 'text-gray-600');
-                playButton.classList.add('bg-teal-500', 'hover:bg-teal-600', 'pulse-effect', 'text-white');
-                visualizer.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> 已解鎖！點擊播放按鈕開始引導。';
-                
-                // 2. 解鎖 CTA 區塊
-                conversionBlock.classList.remove('opacity-30', 'pointer-events-none');
-                
-                // 3. 隱藏名單表單區塊 (讓版面更乾淨)
-                emailFormBlock.classList.add('hidden');
+            // 基礎驗證
+            if (!name) { showCustomMessage("請填寫您的稱謂。", 'warning'); nameInput.focus(); return; }
+            if (!email || !email.includes('@')) { showCustomMessage("請輸入有效的電子信箱格式。", 'warning'); emailInput.focus(); return; }
 
-                showCustomMessage("解鎖成功！請點擊播放音頻，並查看下方的專屬教練通道。", 'success');
-            }
+            // 進入載入狀態
+            submitEmailButton.disabled = true;
+            submitEmailButton.innerHTML = '<i data-lucide="loader" class="w-5 h-5 inline mr-2 animate-spin"></i> 資料驗證中...';
             lucide.createIcons();
+
+            try {
+                // 等待 Firebase 初始化完成
+                await window.firebaseInitPromise;
+                
+                const success = await window.saveLeadEmail(name, email);
+                
+                if (success) {
+                    emailSubmitted = true;
+                    
+                    // 1. 解鎖音頻控制區
+                    audioControls.classList.remove('opacity-50', 'pointer-events-none');
+                    playButton.disabled = false;
+                    playButton.classList.remove('bg-gray-300', 'cursor-not-allowed', 'text-gray-600');
+                    playButton.classList.add('bg-teal-500', 'hover:bg-teal-600', 'pulse-effect', 'text-white');
+                    visualizer.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> 已解鎖！點擊播放按鈕開始引導。';
+                    
+                    // 2. 解鎖 CTA 區塊
+                    conversionBlock.classList.remove('opacity-30', 'pointer-events-none');
+                    
+                    // 3. 隱藏名單表單區塊
+                    emailFormBlock.classList.add('hidden');
+
+                    showCustomMessage("解鎖成功！請點擊播放音頻，並查看下方的專屬教練通道。", 'success');
+                } else {
+                    // 如果儲存失敗，重新啟用按鈕
+                    showCustomMessage("提交失敗，請稍後再試。", 'error');
+                }
+
+            } catch (error) {
+                showCustomMessage("系統連線錯誤，請稍後重試。", 'error');
+                console.error("Submission failed:", error);
+            } finally {
+                // 無論成功或失敗，恢復按鈕狀態
+                submitEmailButton.disabled = false;
+                submitEmailButton.innerHTML = '<i data-lucide="mail" class="w-5 h-5 inline mr-2"></i> 立即解鎖您的專屬通道';
+                lucide.createIcons();
+            }
         });
 
 
-        // --- 音頻播放邏輯 (僅在解鎖後運行) ---
+        // --- 音頻播放邏輯 (保持不變) ---
 
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
@@ -305,11 +338,10 @@
         audioPlayer.addEventListener('ended', () => {
             isPlaying = false;
             playButton.innerHTML = '<i data-lucide="repeat" class="w-6 h-6 inline mr-2"></i> 再次重置內在節奏';
-            playButton.classList.remove('bg-teal-700', 'hover:bg-teal-800', 'pulse-effect'); // 停止脈動
-            playButton.classList.add('bg-teal-500', 'hover:bg-teal-600'); // 回到正常流動色
+            playButton.classList.remove('bg-teal-700', 'hover:bg-teal-800', 'pulse-effect'); 
+            playButton.classList.add('bg-teal-500', 'hover:bg-teal-600'); 
             visualizer.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> 引導完成。是時候啟動加速計畫了！';
             if (emailSubmitted) {
-                // 播放結束後，強制閃爍引導轉換
                 consultationLink.classList.add('cta-pulse-animation');
             }
             lucide.createIcons();
@@ -318,7 +350,7 @@
         playButton.addEventListener('click', () => {
             // 檢查音頻是否已替換
             if (audioPlayer.currentSrc.includes('my-sleep-guide.mp3')) {
-                 showCustomMessage("🚨 請先將音頻檔案上傳到 GitHub，並更新 HTML 程式碼中的音頻連結。", 'error');
+                 showCustomMessage("🚨 請先將音頻檔案上傳到網路，並更新 HTML 程式碼中的音頻連結 (替換點 1)。", 'error');
                  return;
             }
 
@@ -335,9 +367,9 @@
                     console.error("Audio playback error:", e);
                 });
                 isPlaying = true;
-                playButton.innerHTML = '<i data-lucide="pause" class-="w-6 h-6 inline mr-2"></i> 暫停引導';
+                playButton.innerHTML = '<i data-lucide="pause" class="w-6 h-6 inline mr-2"></i> 暫停引導';
                 playButton.classList.remove('bg-teal-500', 'hover:bg-teal-600'); 
-                playButton.classList.add('bg-teal-700', 'hover:bg-teal-800'); // 播放時變深色，增加專注感
+                playButton.classList.add('bg-teal-700', 'hover:bg-teal-800'); 
                 visualizer.textContent = '🎶 內在節奏重塑中...請專注於您的穩定與執行力。';
                 playButton.classList.add('pulse-effect');
             }
