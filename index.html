@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>【免費】內在節奏加速器：穩定心智與決策力</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Firebase 導入：名單收集 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 全域變數定義
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initialAuthToken : null;
+
+        window.firebase = {}; 
+        window.firebase.db = null;
+        window.firebase.userId = null;
+        
+        // Firebase 初始化
+        window.initializeFirebase = async function() {
+            try {
+                setLogLevel('error'); 
+
+                const app = initializeApp(firebaseConfig);
+                const db = getFirestore(app);
+                const auth = getAuth(app);
+                
+                window.firebase.db = db;
+
+                // 身份驗證
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        window.firebase.userId = user.uid;
+                        console.log("Firebase 初始化成功。");
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase 初始化失敗:", error);
+                showCustomMessage("資料庫連線失敗，名單收集功能可能無法運作。", 'error');
+            }
+        }
+        
+        /**
+         * 儲存電子郵件和名稱到 Firestore
+         */
+        window.saveLeadEmail = async function(name, email) {
+            const db = window.firebase.db;
+            const userId = window.firebase.userId;
+
+            if (!db || !userId) {
+                showCustomMessage("資料庫尚未準備好，請稍等再試一次。", 'warning');
+                return false;
+            }
+
+            try {
+                // 資料會儲存在 /artifacts/{appId}/public/data/general_leads 集合中
+                const leadsCollectionRef = collection(db, `artifacts/${appId}/public/data/general_leads`);
+                
+                await addDoc(leadsCollectionRef, {
+                    name: name, // 姓名
+                    email: email, 
+                    userId: userId,
+                    source: 'rhythm_accelerator_v19', // 更新版本號
+                    timestamp: new Date().toISOString()
+                });
+
+                showCustomMessage("解鎖成功！請點擊播放按鈕開始 12 分鐘引導。", 'success');
+                return true;
+
+            } catch (error) {
+                console.error("儲存電子郵件失敗:", error);
+                showCustomMessage("儲存時發生錯誤。請確認您的資訊是否正確。", 'error');
+                return false;
+            }
+        }
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .bg-page {
+            /* 淺色、清新的背景 */
+            background: linear-gradient(135deg, #f3f4f6 0%, #ffffff 100%);
+        }
+        /* 播放按鈕脈動效果 - Teal 代表流動與心流 */
+        @keyframes subtle-pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(20, 184, 166, 0.4); } /* teal-500 */
+            50% { transform: scale(1.02); box-shadow: 0 0 15px rgba(20, 184, 166, 0.8); }
+        }
+        .pulse-effect {
+            animation: subtle-pulse 3s infinite ease-in-out;
+        }
+        /* 轉換按鈕的閃爍 - 紅色，解決核心問題的迫切性 */
+        @keyframes conversion-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } /* red-500 */
+            50% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+        }
+        .cta-pulse-animation {
+            animation: conversion-pulse 2.5s infinite;
+        }
+        /* 隱藏標準播放器但保留控制權 */
+        #audioPlayer { display: none; }
+    </style>
+</head>
+<body class="bg-page min-h-screen text-gray-900 flex justify-center items-center p-4">
+
+    <!-- 自定義訊息框 -->
+    <div id="customMessageContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
+    
+    <!-- 主容器 -->
+    <div class="w-full max-w-md bg-white p-8 rounded-3xl shadow-2xl border border-gray-200 flex flex-col items-center gap-6">
+
+        <header class="text-center">
+            <h1 class="text-3xl font-extrabold text-indigo-800 mb-2">🚀 內在節奏加速器</h1>
+            <p class="text-gray-600 text-md">獻給所有「該睡睡不著、該做卻不做」的高壓人群，找回您的節奏與勇氣。</p>
+        </header>
+
+        <!-- 音頻播放器 (隱藏) -->
+        <audio id="audioPlayer">
+            <!-- ⭐️ 替換點 1: 您的 12 分鐘音頻原始連結 ⭐️ -->
+            <source src="https://drive.google.com/file/d/1uNpibQkB_M1xuSlicsFW58bRG2aHwtdK/view?usp=sharing" type="audio/mp3"> 
+            您的瀏覽器不支持音頻播放。
+        </audio>
+
+        <!-- 名單收集區塊：音頻解鎖 -->
+        <div id="emailFormBlock" class="w-full p-5 bg-gray-50 rounded-2xl border border-indigo-200 shadow-inner text-center">
+            <h3 class="text-xl font-bold text-teal-600 mb-3 flex items-center justify-center gap-2">
+                <i data-lucide="lock" class="w-6 h-6"></i> 立即解鎖【12 分鐘心流引導音頻】
+            </h3>
+            <p class="text-gray-600 mb-4 text-sm">輸入您的資訊，即可獲取這份高價值引導，並解鎖下方的專屬教練通道。</p>
+            
+            <form id="emailForm" class="flex flex-col space-y-3">
+                
+                <!-- 名稱欄位 (必填) -->
+                <input type="text" id="nameInput" placeholder="您的稱謂 (必填)" required
+                       class="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder-gray-500 focus:ring-indigo-500 focus:border-indigo-500">
+                
+                <!-- 信箱欄位 (必填) -->
+                <input type="email" id="emailInput" placeholder="您的電子信箱 (必填)" required
+                       class="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder-gray-500 focus:ring-indigo-500 focus:border-indigo-500">
+                       
+                <button type="submit" id="submitEmailButton"
+                        class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold text-white transition duration-300 shadow-md">
+                    <i data-lucide="mail" class="w-5 h-5 inline mr-2"></i> 立即解鎖您的專屬通道
+                </button>
+            </form>
+        </div>
+        
+        <!-- 自定義音頻控制區 (初始鎖定) -->
+        <div id="audioControls" class="w-full mt-4 opacity-50 pointer-events-none transition-opacity duration-300">
+            <div id="visualizer" class="h-10 bg-gray-200 rounded-lg mb-4 flex items-center justify-center text-sm text-red-600 font-bold">
+                <i data-lucide="lock" class="w-4 h-4 mr-2"></i> 請先輸入資訊解鎖音頻播放
+            </div>
+
+            <button id="playButton" disabled
+                    class="w-full py-5 rounded-2xl font-bold text-xl bg-gray-300 shadow-lg cursor-not-allowed text-gray-600">
+                <i data-lucide="play" class="w-6 h-6 inline mr-2"></i> 啟動 12 分鐘心流重置引導
+            </button>
+            
+            <p id="timerDisplay" class="text-center text-sm text-gray-500 mt-2">
+                時長: <span id="currentTime">--:--</span> / <span id="durationTime">--:--</span>
+            </p>
+        </div>
+        
+        <!-- 轉換點：諮詢區塊 (初始鎖定) -->
+        <div id="conversionBlock" class="w-full mt-4 p-5 bg-white rounded-2xl border border-red-300 shadow-lg text-center opacity-30 pointer-events-none transition-opacity duration-500">
+            
+            <h3 class="text-xl font-extrabold text-red-600 mb-3 flex items-center justify-center gap-2">
+                <i data-lucide="alert-triangle" class="w-5 h-5"></i> 從片刻平靜到持久穩定：下一步？
+            </h3>
+            
+            <p class="text-gray-600 mb-5 text-sm">
+                單次引導僅能提供片刻安定，無法根治您體內**不斷循環的壓力與猶豫不決的慣性**。
+                若想將這份安定感**內化為持久的行動慣性**，並**徹底根除壓力迴圈**，您需要一個專屬的系統性重塑計畫。
+            </p>
+
+            <!-- CTA 按鈕：勇氣加速器名稱放在這裡 -->
+            <!-- ⭐️ 替換點 2: 請用您的 Line ID 連結或預約諮詢頁面連結替換此處的 URL ⭐️ -->
+            <a id="consultationLink" href="https://https://lemonhumandesign.com/book-a-call/" target="_blank"
+               class="w-full inline-flex items-center justify-center py-4 rounded-xl font-bold text-lg transition duration-300 bg-red-600 hover:bg-red-700 shadow-xl text-white">
+                <i data-lucide="rocket" class="w-6 h-6 inline mr-2"></i> 立即預約教練：專屬勇氣加速器諮詢
+            </a>
+            
+        </div>
+
+    </div>
+
+    <script>
+        // --- 初始化 & 變數 ---
+        lucide.createIcons();
+        window.initializeFirebase(); // 呼叫 Firebase 初始化
+        
+        const audioPlayer = document.getElementById('audioPlayer');
+        const playButton = document.getElementById('playButton');
+        const visualizer = document.getElementById('visualizer');
+        const currentTimeDisplay = document.getElementById('currentTime');
+        const durationTimeDisplay = document.getElementById('durationTime');
+        const consultationLink = document.getElementById('consultationLink');
+        const emailForm = document.getElementById('emailForm');
+        const nameInput = document.getElementById('nameInput'); // 名稱輸入欄
+        const emailInput = document.getElementById('emailInput');
+        const conversionBlock = document.getElementById('conversionBlock');
+        const audioControls = document.getElementById('audioControls'); 
+        const emailFormBlock = document.getElementById('emailFormBlock');
+        
+        let isPlaying = false;
+        let emailSubmitted = false; 
+
+        /** 自定義訊息框 (取代 alert()) */
+        function showCustomMessage(message, type = 'success') {
+            const container = document.getElementById('customMessageContainer');
+            const color = type === 'success' ? 'bg-teal-500' : type === 'error' ? 'bg-red-500' : 'bg-yellow-500';
+
+            const msgBox = document.createElement('div');
+            msgBox.className = `p-4 rounded-lg shadow-xl text-white ${color} transition transform duration-300 ease-out translate-x-0`;
+            msgBox.textContent = message;
+
+            container.appendChild(msgBox);
+
+            setTimeout(() => {
+                msgBox.classList.add('-translate-x-full', 'opacity-0');
+                msgBox.addEventListener('transitionend', () => msgBox.remove());
+            }, 5000);
+        }
+
+        // --- 名單收集邏輯：成功後解鎖所有功能 ---
+        emailForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const name = nameInput.value.trim();
+            const email = emailInput.value.trim();
+
+            if (!name) {
+                 showCustomMessage("請填寫您的稱謂。", 'warning');
+                 nameInput.focus();
+                 return;
+            }
+
+            if (!email || !email.includes('@')) {
+                showCustomMessage("請輸入有效的電子信箱格式。", 'warning');
+                emailInput.focus();
+                return;
+            }
+
+            const success = await window.saveLeadEmail(name, email); // 傳入名稱和信箱
+            
+            if (success) {
+                emailSubmitted = true;
+                
+                // 1. 解鎖音頻控制區
+                audioControls.classList.remove('opacity-50', 'pointer-events-none');
+                playButton.disabled = false;
+                playButton.classList.remove('bg-gray-300', 'cursor-not-allowed', 'text-gray-600');
+                playButton.classList.add('bg-teal-500', 'hover:bg-teal-600', 'pulse-effect', 'text-white');
+                visualizer.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> 已解鎖！點擊播放按鈕開始引導。';
+                
+                // 2. 解鎖 CTA 區塊
+                conversionBlock.classList.remove('opacity-30', 'pointer-events-none');
+                
+                // 3. 隱藏名單表單區塊 (讓版面更乾淨)
+                emailFormBlock.classList.add('hidden');
+
+                showCustomMessage("解鎖成功！請點擊播放音頻，並查看下方的專屬教練通道。", 'success');
+            }
+            lucide.createIcons();
+        });
+
+
+        // --- 音頻播放邏輯 (僅在解鎖後運行) ---
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        audioPlayer.addEventListener('loadedmetadata', () => {
+            durationTimeDisplay.textContent = formatTime(audioPlayer.duration);
+        });
+
+        audioPlayer.addEventListener('timeupdate', () => {
+            currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
+            
+            // 播放超過一半或最後 30 秒，強制讓 CTA 閃爍
+            if (emailSubmitted && audioPlayer.duration > 60 && (audioPlayer.currentTime > audioPlayer.duration / 2 || audioPlayer.currentTime > audioPlayer.duration - 30)) {
+                consultationLink.classList.add('cta-pulse-animation');
+            }
+        });
+
+        audioPlayer.addEventListener('ended', () => {
+            isPlaying = false;
+            playButton.innerHTML = '<i data-lucide="repeat" class="w-6 h-6 inline mr-2"></i> 再次重置內在節奏';
+            playButton.classList.remove('bg-teal-700', 'hover:bg-teal-800', 'pulse-effect'); // 停止脈動
+            playButton.classList.add('bg-teal-500', 'hover:bg-teal-600'); // 回到正常流動色
+            visualizer.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> 引導完成。是時候啟動加速計畫了！';
+            if (emailSubmitted) {
+                // 播放結束後，強制閃爍引導轉換
+                consultationLink.classList.add('cta-pulse-animation');
+            }
+            lucide.createIcons();
+        });
+
+        playButton.addEventListener('click', () => {
+            // 檢查音頻是否已替換
+            if (audioPlayer.currentSrc.includes('my-sleep-guide.mp3')) {
+                 showCustomMessage("🚨 請先將音頻檔案上傳到 GitHub，並更新 HTML 程式碼中的音頻連結。", 'error');
+                 return;
+            }
+
+            if (isPlaying) {
+                audioPlayer.pause();
+                isPlaying = false;
+                playButton.innerHTML = '<i data-lucide="pause" class="w-6 h-6 inline mr-2"></i> 繼續引導 (心智定錨)';
+                playButton.classList.remove('bg-teal-700', 'hover:bg-teal-800'); 
+                playButton.classList.add('bg-teal-500', 'hover:bg-teal-600');
+                visualizer.textContent = '⏸️ 引導已暫停，隨時可以繼續';
+            } else {
+                audioPlayer.play().catch(e => {
+                    showCustomMessage("瀏覽器需要用戶互動才能開始播放。請再點擊一次播放按鈕。", 'warning');
+                    console.error("Audio playback error:", e);
+                });
+                isPlaying = true;
+                playButton.innerHTML = '<i data-lucide="pause" class-="w-6 h-6 inline mr-2"></i> 暫停引導';
+                playButton.classList.remove('bg-teal-500', 'hover:bg-teal-600'); 
+                playButton.classList.add('bg-teal-700', 'hover:bg-teal-800'); // 播放時變深色，增加專注感
+                visualizer.textContent = '🎶 內在節奏重塑中...請專注於您的穩定與執行力。';
+                playButton.classList.add('pulse-effect');
+            }
+            lucide.createIcons();
+        });
+
+        // 應用程式初始化
+        window.onload = () => {
+            // 初始狀態：音頻控制區是鎖定的
+            visualizer.innerHTML = '<i data-lucide="lock" class="w-4 h-4 mr-2"></i> 請先輸入資訊解鎖音頻播放';
+        };
+
+    </script>
+</body>
+</html>
