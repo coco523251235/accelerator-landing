@@ -9,130 +9,33 @@
     <!-- 載入 Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     
-    <!-- Firebase 導入：名單收集 -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // 全域變數定義
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        window.firebase = {}; 
-        window.firebase.db = null;
-        window.firebase.userId = null;
-        // 新增狀態變數：追蹤 Firebase 是否已準備好資料庫和用戶ID
-        window.firebase.isReady = false; 
-        
-        /** * 初始化 Firebase (在網頁載入時立即執行) 
-         * 使用 Promise 確保異步操作的同步性
-         */
-        window.initializeFirebase = function() {
-            return new Promise(async (resolve, reject) => {
-                try {
-                    setLogLevel('error'); // 只顯示錯誤訊息
-    
-                    const app = initializeApp(firebaseConfig);
-                    const db = getFirestore(app);
-                    const auth = getAuth(app);
-                    
-                    window.firebase.db = db;
-    
-                    // 身份驗證
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-    
-                    // 監聽身份驗證狀態變化，確保取得用戶ID
-                    onAuthStateChanged(auth, (user) => {
-                        if (user) {
-                            window.firebase.userId = user.uid;
-                            window.firebase.isReady = true; // Firebase 準備就緒！
-                            resolve(); // 解析 Promise
-                        } else {
-                            // Fallback for environments without token
-                            if (!window.firebase.isReady) {
-                                window.firebase.userId = auth.currentUser?.uid || 'anonymous-' + Date.now();
-                                window.firebase.isReady = true;
-                                resolve();
-                            }
-                        }
-                    });
-    
-                } catch (error) {
-                    console.error("Firebase 初始化失敗:", error);
-                    reject(error);
-                }
-            });
-        }
-        
-        /**
-         * 儲存電子郵件和名稱到 Firestore
-         */
-        window.saveLeadEmail = async function(name, email) {
-            const db = window.firebase.db;
-            const userId = window.firebase.userId;
-
-            if (!window.firebase.isReady || !db || !userId) {
-                // 如果到這裡還沒準備好，則表示連線失敗
-                showCustomMessage("資料庫連線失敗，請檢查網路或稍後再試。", 'error');
-                return false;
-            }
-
-            try {
-                // 資料會儲存在 /artifacts/{appId}/public/data/general_leads 集合中
-                const leadsCollectionRef = collection(db, `artifacts/${appId}/public/data/general_leads`);
-                
-                await addDoc(leadsCollectionRef, {
-                    name: name, 
-                    email: email, 
-                    userId: userId,
-                    source: 'rhythm_accelerator_v20_fix', // 更新版本號
-                    timestamp: new Date().toISOString()
-                });
-
-                return true;
-
-            } catch (error) {
-                console.error("儲存電子郵件失敗:", error);
-                showCustomMessage("儲存時發生錯誤。請檢查您的資訊是否正確。", 'error');
-                return false;
-            }
-        }
-    </script>
-
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         body { font-family: 'Inter', sans-serif; }
         .bg-page {
-            /* 淺色、清新的背景 */
             background: linear-gradient(135deg, #f3f4f6 0%, #ffffff 100%);
         }
-        /* 播放按鈕脈動效果 - Teal 代表流動與心流 */
         @keyframes subtle-pulse {
-            0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(20, 184, 166, 0.4); } /* teal-500 */
+            0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(20, 184, 166, 0.4); } 
             50% { transform: scale(1.02); box-shadow: 0 0 15px rgba(20, 184, 166, 0.8); }
         }
         .pulse-effect {
             animation: subtle-pulse 3s infinite ease-in-out;
         }
-        /* 轉換按鈕的閃爍 - 紅色，解決核心問題的迫切性 */
         @keyframes conversion-pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } /* red-500 */
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 
             50% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
         }
         .cta-pulse-animation {
             animation: conversion-pulse 2.5s infinite;
         }
-        /* 隱藏標準播放器但保留控制權 */
         #audioPlayer { display: none; }
     </style>
 </head>
 <body class="bg-page min-h-screen text-gray-900 flex justify-center items-center p-4">
+
+    <!-- 關鍵：隱藏的 iframe 用於背景提交表單，防止頁面跳轉 -->
+    <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(submitted) { formSuccessHandler(); }"></iframe>
 
     <!-- 自定義訊息框 -->
     <div id="customMessageContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
@@ -147,8 +50,9 @@
 
         <!-- 音頻播放器 (隱藏) -->
         <audio id="audioPlayer">
-            <!-- ⭐️ 替換點 1: 您的 12 分鐘音頻原始連結 ⭐️ -->
-            <source src="https://drive.google.com/file/d/1uNpibQkB_M1xuSlicsFW58bRG2aHwtdK/view?usp=sharing" type="audio/mp3"> 
+            <!-- ⭐️ 替換點 1: 您的 12 分鐘音頻原始連結 (已修正為 Google Drive 直鏈格式) ⭐️ -->
+            <!-- 請確認該檔案已設為「知道連結的人皆可存取」 -->
+            <source src="https://drive.google.com/uc?export=download&id=1uNpibQkB_M1xuSlicsFW58bRG2aHwtdK" type="audio/mp3"> 
             您的瀏覽器不支持音頻播放。
         </audio>
 
@@ -159,14 +63,24 @@
             </h3>
             <p class="text-gray-600 mb-4 text-sm">輸入您的資訊，即可獲取這份高價值引導，並解鎖下方的專屬教練通道。</p>
             
-            <form id="emailForm" class="flex flex-col space-y-3">
+            <!-- 🌟 ConvertKit 專用表單結構 🌟 -->
+            <!-- ⭐️ 替換點 2: ConvertKit Action URL ⭐️ -->
+            <form id="emailForm" class="flex flex-col space-y-3" 
+                  action="https://app.convertkit.com/forms/8833846/subscriptions" 
+                  method="POST" 
+                  target="hidden_iframe">
+
+                <!-- ⭐️ 替換點 3: ConvertKit form_id ⭐️ -->
+                <input type="hidden" name="form_id" value="8833846" /> 
+                <!-- ⭐️ 替換點 4: ConvertKit k_id ⭐️ -->
+                <input type="hidden" name="k_id" value="534e0fb20c" />
                 
-                <!-- 名稱欄位 (必填) -->
-                <input type="text" id="nameInput" placeholder="您的稱謂 (必填)" required
+                <!-- 姓名欄位: 採用 ConvertKit 預設的 name 屬性 -->
+                <input type="text" name="fields[first_name]" id="nameInput" placeholder="您的稱謂 (必填)" required
                        class="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder-gray-500 focus:ring-indigo-500 focus:border-indigo-500">
                 
-                <!-- 信箱欄位 (必填) -->
-                <input type="email" id="emailInput" placeholder="您的電子信箱 (必填)" required
+                <!-- 信箱欄位: 採用 ConvertKit 預設的 name 屬性 -->
+                <input type="email" name="email_address" id="emailInput" placeholder="您的電子信箱 (必填)" required
                        class="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder-gray-500 focus:ring-indigo-500 focus:border-indigo-500">
                        
                 <button type="submit" id="submitEmailButton"
@@ -205,7 +119,7 @@
             </p>
 
             <!-- CTA 按鈕：勇氣加速器名稱放在這裡 -->
-            <!-- ⭐️ 替換點 2: 請用您的 Line ID 連結或預約諮詢頁面連結替換此處的 URL ⭐️ -->
+            <!-- ⭐️ 替換點 5: 教練預約連結 ⭐️ -->
             <a id="consultationLink" href="https://lemonhumandesign.com/book-a-call/" target="_blank"
                class="w-full inline-flex items-center justify-center py-4 rounded-xl font-bold text-lg transition duration-300 bg-red-600 hover:bg-red-700 shadow-xl text-white">
                 <i data-lucide="rocket" class="w-6 h-6 inline mr-2"></i> 立即預約教練：專屬勇氣加速器諮詢
@@ -218,11 +132,6 @@
     <script>
         // --- 初始化 & 變數 ---
         lucide.createIcons();
-        // 初始化 Firebase (在網頁載入後，但其他腳本運行前開始異步連線)
-        window.firebaseInitPromise = window.initializeFirebase().catch(e => {
-            showCustomMessage("系統：Firebase 初始化失敗。請稍後再試。", 'error');
-            console.error("Firebase init failed:", e);
-        });
         
         const audioPlayer = document.getElementById('audioPlayer');
         const playButton = document.getElementById('playButton');
@@ -240,6 +149,7 @@
         
         let isPlaying = false;
         let emailSubmitted = false; 
+        let submitted = false; // 追蹤表單是否已提交到 iframe
 
         /** 自定義訊息框 (取代 alert()) */
         function showCustomMessage(message, type = 'success') {
@@ -258,61 +168,56 @@
             }, 5000);
         }
 
-        // --- 名單收集邏輯：成功後解鎖所有功能 (優化連線穩定性) ---
+        /** 表單提交成功後執行解鎖 */
+        window.formSuccessHandler = function() {
+            if (submitted) {
+                emailSubmitted = true;
+                
+                // 1. 解鎖音頻控制區
+                audioControls.classList.remove('opacity-50', 'pointer-events-none');
+                playButton.disabled = false;
+                playButton.classList.remove('bg-gray-300', 'cursor-not-allowed', 'text-gray-600');
+                playButton.classList.add('bg-teal-500', 'hover:bg-teal-600', 'pulse-effect', 'text-white');
+                visualizer.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> 🚀 名單已發送至 ConvertKit！請點擊播放按鈕開始引導。';
+                
+                // 2. 解鎖 CTA 區塊
+                conversionBlock.classList.remove('opacity-30', 'pointer-events-none');
+                
+                // 3. 隱藏名單表單區塊
+                emailFormBlock.classList.add('hidden');
+                
+                // 4. 發出成功通知
+                showCustomMessage("解鎖成功！名單已收集並傳送至您的 ConvertKit。", 'success');
+
+                // 恢復按鈕狀態 
+                submitEmailButton.disabled = false;
+                submitEmailButton.innerHTML = '<i data-lucide="mail" class="w-5 h-5 inline mr-2"></i> 立即解鎖您的專屬通道'; 
+                lucide.createIcons();
+
+                submitted = false; // 重置提交標記
+            }
+        }
+
+        // --- 表單提交邏輯 ---
         emailForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
             const name = nameInput.value.trim();
             const email = emailInput.value.trim();
             
             // 基礎驗證
-            if (!name) { showCustomMessage("請填寫您的稱謂。", 'warning'); nameInput.focus(); return; }
-            if (!email || !email.includes('@')) { showCustomMessage("請輸入有效的電子信箱格式。", 'warning'); emailInput.focus(); return; }
+            if (!name || !email || !email.includes('@')) { 
+                showCustomMessage("請填寫完整的有效資訊。", 'warning'); 
+                return;
+            }
 
             // 進入載入狀態
             submitEmailButton.disabled = true;
-            submitEmailButton.innerHTML = '<i data-lucide="loader" class="w-5 h-5 inline mr-2 animate-spin"></i> 資料驗證中...';
+            submitEmailButton.innerHTML = '<i data-lucide="loader" class="w-5 h-5 inline mr-2 animate-spin"></i> 資料傳送中...';
             lucide.createIcons();
 
-            try {
-                // 等待 Firebase 初始化完成
-                await window.firebaseInitPromise;
-                
-                const success = await window.saveLeadEmail(name, email);
-                
-                if (success) {
-                    emailSubmitted = true;
-                    
-                    // 1. 解鎖音頻控制區
-                    audioControls.classList.remove('opacity-50', 'pointer-events-none');
-                    playButton.disabled = false;
-                    playButton.classList.remove('bg-gray-300', 'cursor-not-allowed', 'text-gray-600');
-                    playButton.classList.add('bg-teal-500', 'hover:bg-teal-600', 'pulse-effect', 'text-white');
-                    visualizer.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> 已解鎖！點擊播放按鈕開始引導。';
-                    
-                    // 2. 解鎖 CTA 區塊
-                    conversionBlock.classList.remove('opacity-30', 'pointer-events-none');
-                    
-                    // 3. 隱藏名單表單區塊
-                    emailFormBlock.classList.add('hidden');
-
-                    showCustomMessage("解鎖成功！請點擊播放音頻，並查看下方的專屬教練通道。", 'success');
-                } else {
-                    // 如果儲存失敗，重新啟用按鈕
-                    showCustomMessage("提交失敗，請稍後再試。", 'error');
-                }
-
-            } catch (error) {
-                showCustomMessage("系統連線錯誤，請稍後重試。", 'error');
-                console.error("Submission failed:", error);
-            } finally {
-                // 無論成功或失敗，恢復按鈕狀態
-                submitEmailButton.disabled = false;
-                submitEmailButton.innerHTML = '<i data-lucide="mail" class="w-5 h-5 inline mr-2"></i> 立即解鎖您的專屬通道';
-                lucide.createIcons();
-            }
+            submitted = true; // 設定提交標記
+            
+            // 成功後的 formSuccessHandler 會在 iframe 加載完畢後自動觸發
         });
-
 
         // --- 音頻播放邏輯 (保持不變) ---
 
@@ -348,10 +253,9 @@
         });
 
         playButton.addEventListener('click', () => {
-            // 檢查音頻是否已替換
-            if (audioPlayer.currentSrc.includes('my-sleep-guide.mp3')) {
-                 showCustomMessage("🚨 請先將音頻檔案上傳到網路，並更新 HTML 程式碼中的音頻連結 (替換點 1)。", 'error');
-                 return;
+            // 檢查 Google Drive 權限，提供最後一層防護提醒
+            if (audioPlayer.currentSrc.includes('1uNpibQkB_M1xuSlicsFW58bRG2aHwtdK')) {
+                 showCustomMessage("🚨 請確認 Google Drive 檔案權限已設定為「知道連結的人皆可存取」，否則音頻將無法播放。", 'error');
             }
 
             if (isPlaying) {
